@@ -17,16 +17,18 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.agriconnect.dto.LoginResponse;
 import com.example.agriconnect.dto.VendorDto;
 import com.example.agriconnect.entity.VendorEntity;
 import com.example.agriconnect.enums.VendorStatus;
 import com.example.agriconnect.jwtutil.JwtUtil;
+import com.example.agriconnect.service.TokenBlacklistService;
 import com.example.agriconnect.service.VendorService;
 
 import io.jsonwebtoken.lang.Collections;
 
 @RestController
-@RequestMapping("api")
+@RequestMapping("api/vendor")
 @CrossOrigin(origins = "http://localhost:3000")
 public class VendorController {
 
@@ -35,15 +37,14 @@ public class VendorController {
 	private VendorService vendorService;
 	@Autowired 
 	private JwtUtil jwtUtil;
+	@Autowired
+	private TokenBlacklistService tokenBlacklistService;
 	
-	@PostMapping("/vendor/register")
+	@PostMapping("/register")
 	public ResponseEntity<Map<String, String>> registerVendor(@RequestBody VendorDto dto) {
 	    VendorDto savedVendor = vendorService.registerVendor(dto);
-	    String token = vendorService.generateToken(savedVendor.getEmail());
-
 	    Map<String, String> response = Map.of(
 	        "message", "Vendor registered successfully!",
-	        "token", token,
 	        "identifier", savedVendor.getEmail(),
 	        "vendorId", savedVendor.getId().toString()
 	    );
@@ -52,35 +53,28 @@ public class VendorController {
 	}
 	
 	
-//	 @PutMapping("/vendor/{id}/status")
-//	    public ResponseEntity<VendorDto> updateVendorStatus(
-//	            @PathVariable Long id,
-//	            @RequestParam VendorStatus status) {
-//
-//	        VendorDto dto = adminService.changeVendorStatus(id, status);
-//	        return ResponseEntity.ok(dto);
-	
-			// this is also inside admin 
-//	    }
-	@PostMapping("/vendor/login")
-	 public ResponseEntity<Map<String, String>> loginVendor(
-	         @RequestParam String identifier, 
-	         @RequestParam String otp) {
+	@PostMapping("/login")
+	public ResponseEntity<LoginResponse> loginVendor(
+	        @RequestParam String identifier,
+	        @RequestParam String otp) {
 
-	     VendorEntity vendor = vendorService.loginVendor(identifier, otp);
-	     String token = vendorService.generateToken(vendor.getEmail());
+	    String token = vendorService.loginVendor(identifier, otp);
 
-	     Map<String, String> response = Map.of(
-	         "message", "Login successful",
-	         "token", token,
-	         "vendorId", vendor.getId().toString()
-	     );
+	    VendorEntity vendor = vendorService.getVendorByIdentifier(identifier);
 
-	     return ResponseEntity.ok(response);
-	 }
+	    LoginResponse loginResponse = new LoginResponse(
+	            vendor.getId(),
+	            vendor.getEmail(),
+	            "ROLE_VENDOR",
+	            token,
+	            vendor.isVerified(),
+	            vendor.getId()
+	    );
 
+	    return ResponseEntity.ok(loginResponse);
+	}
 	 
-	 @GetMapping("/vendor/{id}")
+	 @GetMapping("/{id}")
 	 public ResponseEntity<VendorDto> getVendorById(@PathVariable Long id) {
 	     VendorDto vendor = vendorService.getVendorById(id);
 	     if (vendor != null) {
@@ -90,18 +84,33 @@ public class VendorController {
 	     }
 	 }
 	 
-	 @PutMapping("/vendor/update")
+	 @PutMapping("/update/{id}")
 	 public ResponseEntity<VendorDto>updateProfile(@PathVariable Long id, @RequestBody VendorDto dto){
 		 VendorDto vendorDto=vendorService.updatevendor(id, dto);
 		 return new ResponseEntity<>(vendorDto,HttpStatus.OK);
 	 }
+	 @PostMapping("/logout")
+	 public ResponseEntity<Map<String, String>> logoutVendor(@RequestHeader("Authorization") String token) {
+	     tokenBlacklistService.logout(token);
+	     return ResponseEntity.ok(Map.of("message", "Vendor logged out successfully"));
+	 }
 	 
-//	 @GetMapping("/vendor/profile")
-//	 public ResponseEntity<VendorDto> getProfile(@RequestHeader("Authorization") String token) {
-//	     String email = jwtUtil.getVendorIdFromToken(token.substring(7)); // <- returns email
-//	     VendorDto dto = vendorService.getVendorProfilleByEmail(email);
-//	     return ResponseEntity.ok(dto);
-//	 }
+	 @PostMapping("/send-otp")
+	 public ResponseEntity<String> sendOtp(
+	         @RequestParam String identifier) { 
+		 String otp=vendorService.sendOtp(identifier);
+			return new ResponseEntity<>(otp,HttpStatus.OK);
+			
+	 }
+	 @PostMapping("/verify-otp")
+	 public ResponseEntity<String> verifyOtp(
+	         @RequestParam String identifier,
+	         @RequestParam String otp) {
+
+	     String message = vendorService.verifyOtp(identifier, otp);
+	     return ResponseEntity.ok(message);
+	 }
+
 
 }
 

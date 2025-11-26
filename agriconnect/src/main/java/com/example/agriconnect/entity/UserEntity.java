@@ -47,7 +47,7 @@ public class UserEntity {
     private LocalDateTime createdAt;
 	private String otp;
 	private LocalDateTime otpExpiry;
-	
+	private boolean isVerified;
 	 @ElementCollection(fetch = FetchType.EAGER)
 	    @Enumerated(EnumType.STRING)
 	    private Set<Role> roles = new HashSet(); 

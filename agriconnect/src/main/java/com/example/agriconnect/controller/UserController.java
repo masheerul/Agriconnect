@@ -1,5 +1,6 @@
 package com.example.agriconnect.controller;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,9 +18,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.agriconnect.dto.LoginResponse;
 import com.example.agriconnect.dto.UserDto;
 import com.example.agriconnect.entity.UserEntity;
 import com.example.agriconnect.jwtutil.JwtUtil;
+import com.example.agriconnect.service.TokenBlacklistService;
 import com.example.agriconnect.service.UserService;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -34,17 +37,18 @@ public class UserController {
 	private UserService service;
 	 @Autowired
 	    private JwtUtil jwtUtil;
-	 @PostMapping("/registerUser")
-	 public ResponseEntity<Map<String, String>> registerUser(@RequestBody UserDto dto) {
-	     UserDto savedUser = service.registerUser(dto);
-	     String token = service.loginByOtp(savedUser.getEmail(), savedUser.getOtp());
+	 @Autowired
+	 private TokenBlacklistService tokenBlacklistService;
+	 
+	 
+	 @PostMapping("/register")
+	 public ResponseEntity<Map<String, String>> registerUser(@RequestBody UserDto userDto) {
+	     UserDto savedUser = service.registerUser(userDto);
 
-	     Map<String, String> response = Map.of(
-	         "message", "User registered successfully!",
-	         "token", token,
-	         "identifier", savedUser.getEmail(),
-	         "userId", savedUser.getId().toString()
-	     );
+	     Map<String, String> response = new HashMap<>();
+	     response.put("message", "User registered successfully. OTP sent to your mobile and email for verification.");
+	     response.put("email", savedUser.getEmail());
+	     response.put("mobileNumber", savedUser.getMobileNumber());
 
 	     return ResponseEntity.status(HttpStatus.CREATED).body(response);
 	 }
@@ -56,28 +60,57 @@ public class UserController {
 		return new ResponseEntity<>(updated, HttpStatus.OK);	
 		}
 	
-	@PostMapping("/auth/login")
-	public ResponseEntity<Map<String, String>> login(@RequestParam String identifier, @RequestParam String otp){
+	@PostMapping("/login")
+	public ResponseEntity<LoginResponse> login(@RequestParam String identifier,
+	                                           @RequestParam String otp) {
+
 	    String token = service.loginByOtp(identifier, otp);
 
-	    Map<String, String> response = Map.of(
-	        "message", "Login successful!",
-	        "token", token
-	    );
+	    UserEntity user = service.getUserByIdentifier(identifier);
 
-	    return ResponseEntity.ok(response);
+	    String role = user.getRoles()
+	            .stream()
+	            .map(Enum::name)
+	            .findFirst()
+	            .orElse("USER");
+
+	    LoginResponse loginResponse = new LoginResponse(
+	            user.getId(),
+	            user.getEmail(),        
+	            role,                  
+	            token,
+	            user.isVerified(),
+	    		null
+	    		);
+
+	    return ResponseEntity.ok(loginResponse);
 	}
-	@GetMapping("/profile")
-    public ResponseEntity<UserDto> getUserProfile(@RequestHeader("Authorization") String token) {
-        String userId = jwtUtil.getUserIdFromToken(token.substring(7)); 
-        UserDto userProfile = service.getUserProfile(Long.parseLong(userId));
 
-        return ResponseEntity.ok(userProfile);
-    }
+
+	@GetMapping("/profile")
+	public ResponseEntity<UserDto> getUserProfile(@RequestHeader("Authorization") String token) {
+	    String username = jwtUtil.extractUsername(token.substring(7));  
+	    UserDto userProfile = service.getUserProfileByUsername(username);
+
+	    return ResponseEntity.ok(userProfile);
+	}
+
 	
-//	@PostMapping("/logout")
-//    public ResponseEntity<String> logout(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
-//        return ResponseEntity.ok(service.logout(request, response, authentication));
-//    }
+	@PostMapping("/logout")
+	public ResponseEntity<Map<String, String>> logoutUser(@RequestHeader("Authorization") String token) {
+	    tokenBlacklistService.logout(token);
+	    return ResponseEntity.ok(Map.of("message", "User logged out successfully"));
+	}
+	
+	@PostMapping("/send-otp")
+	public ResponseEntity<String>sendOtp(@RequestParam String identifier){
+		String sendOtp=service.sendOtp(identifier);
+		return ResponseEntity.ok(sendOtp);
+	}
+	@PostMapping("/verify-otp")
+	public ResponseEntity<String> verifyOtp(@RequestParam String identifier, @RequestParam String otp){
+		String message=service.verifyOtp(identifier, otp);
+		return ResponseEntity.ok(message);
+	}
 			
 }

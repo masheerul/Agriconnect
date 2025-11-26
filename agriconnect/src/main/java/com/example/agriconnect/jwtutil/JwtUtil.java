@@ -1,51 +1,64 @@
 package com.example.agriconnect.jwtutil;
 
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
-
-import javax.crypto.spec.SecretKeySpec;
-
+import io.jsonwebtoken.*;
+import io.jsonwebtoken.security.Keys;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
-
-@Component  
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
+@Component
 public class JwtUtil {
-    private static final String SECRET = "thisIsA32ByteSecretKeyForJwt123456!";
-    private static final long EXPIRATION = 1000 * 60 * 60 * 24; 
 
-    private static final Key key = new SecretKeySpec(SECRET.getBytes(), SignatureAlgorithm.HS256.getJcaName());
+    private final String SECRET = "ThisIsASecretKeyForJwtAuthentication1234567890";
+    private final long EXPIRATION = 1000 * 60 * 60 * 10; 
 
-    public static String generateToken(String userId, String role) {
+    private Key getSigningKey() {
+        return Keys.hmacShaKeyFor(SECRET.getBytes());
+    }
+    
+    public String generateToken(Long userId, String email, String role) {
         return Jwts.builder()
-                .setSubject(userId)
-                .claim("role", role)
+                .setSubject(email) 
+                .claim("id", userId) 
+                .claim("role", role) 
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION))
-                .signWith(key)
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
-
-    public static String getUserIdFromToken(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(key)
-                .build()
-                .parseClaimsJws(token)
-                .getBody()
-                .getSubject();
-    }
-
-    public static String getRoleFromToken(String token) {
-        return (String) Jwts.parserBuilder()
-                .setSigningKey(key)
-                .build()
-                .parseClaimsJws(token)
-                .getBody()
-                .get("role");
-    }
-
-
     
+    private Claims getAllClaims(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+    }
 
+    public String extractUsername(String token) {
+        return getAllClaims(token).getSubject();
+    }
+
+    public Long extractUserId(String token) {
+        return getAllClaims(token).get("id", Long.class);
+    }
+
+    public String extractRole(String token) {
+        return getAllClaims(token).get("role", String.class);
+    }
+    
+    public boolean isTokenValid(String token) {
+        try {
+            Claims claims = getAllClaims(token);
+            return !claims.getExpiration().before(new Date());
+        } catch (Exception e) {
+            return false;
+        }
+    }
 }
+
+

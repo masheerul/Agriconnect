@@ -29,6 +29,8 @@ public class AdminService {
 		private VendorRepository vendorRepository;
 		@Autowired
 		private ModelMapper mapper;
+		@Autowired
+		private JwtUtil jwtUtil;
 		
 		public AdminDto registerAdmin(AdminDto adminDto) {
 	        if (adminRepository.findByEmail(adminDto.getEmail()).isPresent()) {
@@ -60,9 +62,7 @@ public class AdminService {
 		    // admin.setOtp(null);
 		    // adminRepository.save(admin);
 
-		    String roleName = admin.getRole().name();
-		    String token = JwtUtil.generateToken(String.valueOf(admin.getId()), roleName);
-		    return token;
+		    return jwtUtil.generateToken(admin.getId(),admin.getEmail(),"ROLE_ADMIN");
 		}
 
 		 

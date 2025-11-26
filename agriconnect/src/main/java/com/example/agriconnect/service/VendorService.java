@@ -14,6 +14,7 @@ import com.example.agriconnect.entity.UserEntity;
 import com.example.agriconnect.entity.VendorEntity;
 import com.example.agriconnect.enums.Role;
 import com.example.agriconnect.enums.VendorStatus;
+import com.example.agriconnect.exception.InvalidOtpException;
 import com.example.agriconnect.exception.VendorNotFoundException;
 import com.example.agriconnect.jwtutil.JwtUtil;
 import com.example.agriconnect.repository.LocationRepository;
@@ -128,7 +129,7 @@ public class VendorService {
 	   return mapper.map(vendor,VendorDto.class);  
 	}
 	
-	public VendorEntity loginVendor(String identifier, String otp) {
+	public String loginVendor(String identifier, String otp) {
         Optional<VendorEntity> optionalVendor = repository.findByEmail(identifier);
         if (!optionalVendor.isPresent()) {
             optionalVendor = repository.findByMobileNumber(identifier);
@@ -142,23 +143,71 @@ public class VendorService {
             throw new RuntimeException("Invalid OTP");
         }
 
+        	if(vendor.getOtpExpiry()== null || vendor.getOtpExpiry().isBefore(LocalDateTime.now())) {
+		             throw new InvalidOtpException("OTP expired. Please request a new one.");
+
+        	}
+        	if (!vendor.isVerified()) {
+                throw new RuntimeException("Vendor not verified. Please verify OTP first.");
+            }
         // Optionally clear OTP after successful login
 //        vendor.setOtp(null);
         repository.save(vendor);
         
+        return jwtUtil.generateToken(
+                vendor.getId(),
+                vendor.getEmail(),
+                "ROLE_VENDOR"
+        );
 
-        return vendor;
+        		
     }
-	 public String generateToken(String vendorEmail) {
-	        
-	        return JwtUtil.generateToken(vendorEmail, "VENDOR"); 
-	        
-	    }
+	
+	
+	public String sendOtp(String identifier) {
+		Optional<VendorEntity>vendorOtp=repository.findByEmail(identifier);
+		 VendorEntity vendor = repository.findByEmail(identifier)
+		            .orElseGet(() -> repository.findByMobileNumber(identifier)
+		            .orElseThrow(() -> new VendorNotFoundException("Vendor not found")));
+		VendorEntity entity=vendorOtp.get();
+		String otp=generateOtp();
+		entity.setOtp(otp);
+		entity.setOtpExpiry(LocalDateTime.now().plusMinutes(50));
+		repository.save(entity);
+		return " Otp sent successfully";
+	}
     
-//    public VendorDto getVendorProfilleByEmail(String email) {
-//    	VendorEntity entity=repository.findByEmail(email)
-//    			.orElseThrow(()-> new VendorNotFoundException("vendor id not found"));
-//    	VendorDto dto=mapper.map(entity, VendorDto.class);
-//    	return dto;
-//    }
+   public VendorEntity getVendorByIdentifier(String identifier) {
+    return repository.findByEmail(identifier)
+            .or(() -> repository.findByMobileNumber(identifier))
+            .orElseThrow(() -> new VendorNotFoundException("Vendor not found"));
+}
+	
+	public String verifyOtp(String identifier, String otp) {
+	    Optional<VendorEntity> optionalVendor = repository.findByEmail(identifier);
+	    if (optionalVendor.isEmpty()) {
+	        optionalVendor = repository.findByMobileNumber(identifier);
+	    }
+
+	    VendorEntity vendor = optionalVendor.orElseThrow(
+	        () -> new VendorNotFoundException("Vendor not found with identifier: " + identifier)
+	    );
+
+	    if (vendor.getOtp() == null || !vendor.getOtp().equals(otp)) {
+	        throw new InvalidOtpException("Invalid OTP");
+	    }
+
+	    if (vendor.getOtpExpiry() == null || vendor.getOtpExpiry().isBefore(LocalDateTime.now())) {
+	        throw new InvalidOtpException("OTP expired. Please request a new one.");
+	    }
+
+	    // Optionally clear OTP after verification
+	    vendor.setVerified(true);
+//	    vendor.setOtp(null);
+//	    vendor.setOtpExpiry(null);
+	    repository.save(vendor);
+
+	    return "OTP verified successfully!";
+	}
+
 }

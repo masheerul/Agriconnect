@@ -53,6 +53,10 @@ public class ProductService {
 		        vendorEntity.setProductEntities(new ArrayList<>());
 		    }
 
+if (!vendorEntity.isVerified()) {
+    throw new RuntimeException("Vendor account is not verified");
+}
+
 		    vendorEntity.getProductEntities().add(productEntity);
 
 		    ProductEntity savedProduct = productRepository.save(productEntity);

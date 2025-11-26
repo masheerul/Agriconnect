@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,6 +21,7 @@ import com.example.agriconnect.dto.AdminDto;
 import com.example.agriconnect.dto.VendorDto;
 import com.example.agriconnect.enums.VendorStatus;
 import com.example.agriconnect.service.AdminService;
+import com.example.agriconnect.service.TokenBlacklistService;
 
 @RestController
 @RequestMapping("api/admin")
@@ -28,6 +30,9 @@ public class AdminController {
 		
 		@Autowired
 		private AdminService adminService;
+		@Autowired
+		private TokenBlacklistService tokenBlacklistService;
+
 		
 		@PostMapping("/register")
 		public ResponseEntity<AdminDto> registerAdmin(@RequestBody AdminDto dto){
@@ -59,5 +64,10 @@ public class AdminController {
 		    @PutMapping("/reject/{vendorId}")
 		    public VendorDto rejectVendor(@PathVariable Long vendorId) {
 		        return adminService.rejectVendor(vendorId);
+		    }
+		    @PostMapping("/logout")
+		    public ResponseEntity<Map<String, String>> logoutAdmin(@RequestHeader("Authorization") String token) {
+		        tokenBlacklistService.logout(token);
+		        return ResponseEntity.ok(Map.of("message", "Admin logged out successfully"));
 		    }
 }

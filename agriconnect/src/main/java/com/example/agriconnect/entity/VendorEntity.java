@@ -53,7 +53,7 @@ public class VendorEntity {
 	    private Role role; 
 	    private LocalDateTime createdAt;
 	    private LocalDateTime updatedAt;
-		
+	    private LocalDateTime otpExpiry;
 	    @OneToOne
 	    @JoinColumn(name = "user_id", nullable = false)
 	    private UserEntity user;

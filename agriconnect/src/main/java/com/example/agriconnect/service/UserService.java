@@ -18,9 +18,11 @@ import com.example.agriconnect.dto.LocationDto;
 import com.example.agriconnect.dto.UserDto;
 import com.example.agriconnect.entity.LocationEntity;
 import com.example.agriconnect.entity.UserEntity;
+import com.example.agriconnect.entity.VendorEntity;
 import com.example.agriconnect.enums.Role;
 import com.example.agriconnect.exception.InvalidOtpException;
 import com.example.agriconnect.exception.UserNotFoundException;
+import com.example.agriconnect.exception.VendorNotFoundException;
 import com.example.agriconnect.jwtutil.JwtUtil;
 import com.example.agriconnect.repository.LocationRepository;
 import com.example.agriconnect.repository.UserRepository;
@@ -42,6 +44,8 @@ public class UserService {
 			private SmsService smsService;
 			@Autowired
 			private EmailService emailService;
+			@Autowired
+			private JwtUtil jwtUtil;
 			
 			public UserDto convertToDto(UserEntity user) {
 		        return mapper.map(user, UserDto.class);
@@ -95,49 +99,96 @@ public class UserService {
 		            
 		            
 		            UserEntity savedEntity = repository.save(entity);
-		            smsService.sendOtpSms(savedEntity.getMobileNumber(),otp);
-		            emailService.sendotpEMail(savedEntity.getEmail(),otp);
+//		            smsService.sendOtpSms(savedEntity.getMobileNumber(),otp);
+//		            emailService.sendotpEMail(savedEntity.getEmail(),otp);
 		            return mapper.map(savedEntity, UserDto.class);
 		            
 		    		
 }
-		    
-		    	public String loginByOtp(String identifier, String otp){
-		    		Optional<UserEntity>otpUser=repository.findByEmail(identifier);
-		    		if(!otpUser.isPresent()) {
-		    			otpUser=repository.findByMobileNumber(identifier);
-		    		}
-		    		 if (!otpUser.isPresent()) {
-		    		        throw new UserNotFoundException("User not found with identifier: " + identifier);
-		    		    }
-		    		
-		    		UserEntity user=otpUser.get();
-		    		if(user.getOtp() == null || !user.getOtp().equals(otp)) {
-		    			throw new InvalidOtpException("Invalid Exception");
-		    		}
-		    		
-//		    		user.setOtp(null);
-//		    		repository.save(user);
-//		    		
-		    		// Get all role names as a comma-separated string or choose one
-		    		String roleNames = user.getRoles().stream()
-		    		    .map(Enum::name)
-		    		    .findFirst()
-		    		    .orElse("USER"); 
-
-		    		String token = JwtUtil.generateToken(String.valueOf(user.getId()), roleNames);
-		    		return  token;
+		    public String sendOtp(String identifier) {
+		    	Optional<UserEntity>userOtp=repository.findByEmail(identifier);
+		    	if(userOtp.isEmpty()) {
+		    		userOtp=repository.findByMobileNumber(identifier);
 		    	}
+		    	if(userOtp.isEmpty()) {
+					throw new UserNotFoundException("User not found with given email or mobile number");
+				}
 		    	
+		    	UserEntity entity=userOtp.get();
+		    	String otp = generateOtp();
+//		    	entity.setOtp(otp);
+//		    	entity.setOtpExpiry(LocalDateTime.now().plusMinutes(5));
+		    	repository.save(entity);
 		    	
-		    	public UserDto getUserProfile(Long userId) {
-		          
-		            UserEntity userEntity = repository.findById(userId)
-		                    .orElseThrow(() -> new RuntimeException("User not found"));
-
-		            UserDto userDto = mapper.map(userEntity, UserDto.class);
-		            return userDto;
+		    	return "otp sent successfully";
+		    }
+		    
+		    public String verifyOtp(String identifier, String otp) {
+		    	Optional<UserEntity> userOtp=repository.findByEmail(identifier);
+		    	if(!userOtp.isPresent()) {
+		    		userOtp=repository.findByMobileNumber(identifier);
+		    	}
+		    	 UserEntity user = userOtp.orElseThrow(
+		    		        () -> new UserNotFoundException("user not found with identifier: " + identifier)
+		    		    );
+		    	if(user.getOtp()== null || !user.getOtp().equals(otp)) {
+			        throw new InvalidOtpException("Invalid OTP");
+		    	}
+		    	if(user.getOtpExpiry() ==  null  || user.getOtpExpiry().isBefore(LocalDateTime.now())) {
+		    		throw new InvalidOtpException("Otp Expired! please request a new one");
+		    	}
+		    	user.setVerified(true);
+//		    	user.setOtp(null);
+//		    	user.setOtpExpiry(null);
+		    	repository.save(user);
+		    	return "otp verified successfully";
+		    			 
+		    	
+		    }
+		    
+		    public String loginByOtp(String identifier, String otp) {
+		        Optional<UserEntity> otpUser = repository.findByEmail(identifier);
+		        if (!otpUser.isPresent()) {
+		            otpUser = repository.findByMobileNumber(identifier);
 		        }
+		        if (!otpUser.isPresent()) {
+		            throw new UserNotFoundException("User not found with identifier: " + identifier);
+		        }
+
+		        UserEntity user = otpUser.get();
+
+		        if (user.getOtp() == null || !user.getOtp().equals(otp)) {
+		            throw new InvalidOtpException("Invalid OTP");
+		        }
+
+		        
+		         if (user.getOtpExpiry() == null || user.getOtpExpiry().isBefore(LocalDateTime.now())) {
+		             throw new InvalidOtpException("OTP expired. Please request a new one.");
+		         }
+
+		        // Clear OTP after login
+		        user.setOtp(otp);
+//		        user.setOtpExpiry(null);
+		        repository.save(user);
+
+		        // Get first role (or default USER)
+		        String roleName = user.getRoles()
+		                .stream()
+		                .findFirst()
+		                .map(r -> "ROLE_" + r.name())   
+		                .orElse("ROLE_USER");
+		        return jwtUtil.generateToken(user.getId(), user.getEmail(), roleName);
+
+
+		    }
+
+		    	
+		    	public UserDto getUserProfileByUsername(String username) {
+		    	    UserEntity user = repository.findByEmail(username)
+		    	            .orElseThrow(() -> new RuntimeException("User not found"));
+		    	    return convertToDto(user);
+		    	}
+
 		    
 		    	public UserDto updateOwnProfile(Long id , UserDto updatedUser){
 		    		UserEntity existingUser=repository.findById(id)
@@ -163,7 +214,11 @@ public class UserService {
 		    	    return convertToDto(savedUser);
 		    		
 		    	}
-		    	
+		    	public UserEntity getUserByIdentifier(String identifier) {
+		    	    return repository.findByEmail(identifier)
+		    	            .or(() -> repository.findByMobileNumber(identifier))
+		    	            .orElseThrow(() -> new UserNotFoundException("User not found"));
+		    	}
 //		   
 }
 

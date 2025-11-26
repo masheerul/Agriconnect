@@ -151,7 +151,6 @@ public class CartService {
 	        UserEntity userEntity = userRepository.findById(userId)
 	            .orElseThrow(() -> new UserNotFoundException("User not found"));
 	        
-	        // Return empty cart if not found instead of throwing exception
 	        CartEntity cartEntity = cartRepository.findByUserEntity(userEntity)
 	            .orElseGet(() -> {
 	                CartEntity newCart = new CartEntity();
@@ -161,15 +160,12 @@ public class CartService {
 	                newCart.setTotalItems(0);
 	                return cartRepository.save(newCart);
 	            });
-	        
-	        // Force initialization of lazy-loaded collections
 	        if (cartEntity.getCartItems() != null) {
-	            cartEntity.getCartItems().size(); // This triggers lazy loading
+	            cartEntity.getCartItems().size(); 
 	        }
 	        
 	        CartDto cartDto = mapper.map(cartEntity, CartDto.class);
 	        
-	        // Calculate totals to ensure they're correct
 	        double totalAmount = cartEntity.getCartItems().stream()
 	            .mapToDouble(item -> item.getPrice() * item.getQuantity())
 	            .sum();
