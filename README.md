@@ -1,0 +1,1 @@
+Agriconnect is a backend application built using Spring Boot, Java, Hibernate, and MySQL. It uses JWT-based authentication and supports role-based access (USER / VENDOR / ADMIN) to manage agricultural product listings, transactions, and secure REST APIs.
